@@ -46,6 +46,11 @@
     color: var(--accent);
     font-weight: bold;
   }
+  .game-area {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
   #board {
     background: var(--board-bg);
     border: 2px solid var(--grid-line);
@@ -55,6 +60,66 @@
     touch-action: none;
     max-width: 90vw;
     max-height: 60vh;
+  }
+  .speed-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    background: var(--board-bg);
+    border: 1px solid var(--grid-line);
+    border-radius: 8px;
+    padding: 12px 10px;
+  }
+  .speed-panel .panel-label {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    color: #94a3b8;
+    text-transform: uppercase;
+  }
+  .speed-panel .tick-label {
+    font-size: 0.7rem;
+    color: #94a3b8;
+  }
+  .dial-wrap {
+    height: 180px;
+    width: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #speedDial {
+    width: 180px;
+    height: 24px;
+    margin: 0;
+    transform: rotate(-90deg);
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  #speedValue {
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+  @media (max-width: 560px) {
+    .game-area {
+      flex-direction: column;
+    }
+    .speed-panel {
+      flex-direction: row;
+      width: 100%;
+      max-width: 90vw;
+      justify-content: center;
+    }
+    .dial-wrap {
+      height: 32px;
+      width: 140px;
+    }
+    #speedDial {
+      width: 140px;
+      transform: none;
+    }
   }
   .controls {
     display: flex;
@@ -127,7 +192,18 @@
     <div>Score: <span id="score">0</span></div>
     <div>Best: <span id="best">0</span></div>
   </div>
-  <canvas id="board"></canvas>
+  <div class="game-area">
+    <canvas id="board"></canvas>
+    <div class="speed-panel">
+      <span class="panel-label">Speed</span>
+      <span class="tick-label">Fast</span>
+      <div class="dial-wrap">
+        <input type="range" id="speedDial" min="1" max="10" step="1" value="4" aria-label="Snake speed">
+      </div>
+      <span class="tick-label">Slow</span>
+      <span id="speedValue">Normal (4/10)</span>
+    </div>
+  </div>
   <div class="controls">
     <div class="dpad">
       <button id="up" aria-label="Up">&#8593;</button>
@@ -164,10 +240,44 @@
   let best = Number(localStorage.getItem(BEST_KEY) || 0);
   bestEl.textContent = best;
 
-  const BASE_SPEED_MS = 220;
-  const MIN_SPEED_MS = 110;
-
   let snake, direction, nextDirection, food, score, speed, running, paused, loopId;
+
+  const speedDial = document.getElementById('speedDial');
+  const speedValueEl = document.getElementById('speedValue');
+  const SPEED_LEVEL_KEY = 'snake-speed-level';
+  const SLOWEST_MS = 300;
+  const FASTEST_MS = 70;
+
+  // level 1 = slowest, 10 = fastest
+  function levelToBaseSpeed(level) {
+    return Math.round(SLOWEST_MS - (level - 1) * (SLOWEST_MS - FASTEST_MS) / 9);
+  }
+
+  function levelToLabel(level) {
+    if (level <= 3) return 'Slow';
+    if (level <= 6) return 'Normal';
+    if (level <= 8) return 'Fast';
+    return 'Very Fast';
+  }
+
+  let baseSpeed, minSpeed;
+
+  function applySpeedLevel(level) {
+    level = Math.min(10, Math.max(1, level));
+    localStorage.setItem(SPEED_LEVEL_KEY, String(level));
+    baseSpeed = levelToBaseSpeed(level);
+    minSpeed = Math.max(FASTEST_MS, Math.round(baseSpeed / 2));
+    speedValueEl.textContent = `${levelToLabel(level)} (${level}/10)`;
+    // Changing the dial mid-game takes effect immediately.
+    if (running) {
+      speed = baseSpeed;
+    }
+  }
+
+  const initialLevel = Number(localStorage.getItem(SPEED_LEVEL_KEY)) || Number(speedDial.value);
+  speedDial.value = initialLevel;
+  applySpeedLevel(initialLevel);
+  speedDial.addEventListener('input', () => applySpeedLevel(Number(speedDial.value)));
 
   function resetState() {
     const mid = Math.floor(GRID_SIZE / 2);
@@ -179,7 +289,7 @@
     direction = { x: 1, y: 0 };
     nextDirection = { x: 1, y: 0 };
     score = 0;
-    speed = BASE_SPEED_MS;
+    speed = baseSpeed;
     scoreEl.textContent = score;
     placeFood();
   }
@@ -253,7 +363,7 @@
     if (head.x === food.x && head.y === food.y) {
       score += 10;
       scoreEl.textContent = score;
-      speed = Math.max(MIN_SPEED_MS, speed - 2);
+      speed = Math.max(minSpeed, speed - 2);
       placeFood();
     } else {
       snake.pop();
